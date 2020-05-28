@@ -62,19 +62,22 @@ class TensorFlowLiteConan(ConanFile):
             env_build["TF_CONFIGURE_IOS"] = "1" if self.settings.os == "iOS" else "0"
             with tools.environment_append(env_build):
                 self.run(
-                    "python configure.py" if tools.os_info.is_windows else "./configure", win_bash=True)
+                    "python configure.py" if tools.os_info.is_windows else "./configure")
                 self.run("bazel shutdown")
-                self.run("./tensorflow/lite/tools/make/download_dependencies.sh", win_bash=True)
+                if self.settings.os == "Windows":
+                    self.run("./tensorflow/contrib/makefile/download_dependencies.sh", win_bash=True)
+                else:
+                    self.run("./tensorflow/contrib/makefile/download_dependencies.sh")
                 target = {"Macos": "//tensorflow/lite:libtensorflowlite.dylib",
                           "Linux": "//tensorflow/lite:libtensorflowlite.so",
                           "Windows": "tensorflow/lite:libtensorflowlite.so"}.get(str(self.settings.os))
                 if self.settings.compiler == "Visual Studio":
                     ## MSVC17 compiler does not offer a specific C++11 mode and defaults to C++14
                     self.run("bazel build --config=opt --define=no_tensorflow_py_deps=true "
-                         "%s --verbose_failures" % target, win_bash=True)
+                         "%s --verbose_failures" % target)
                 else:
                     self.run("bazel build --cxxopt='-std=c++11' --config=opt --define=no_tensorflow_py_deps=true "
-                         "%s --verbose_failures" % target, win_bash=True)
+                         "%s --verbose_failures" % target)
               
 
     def packageLibs(self, src):
