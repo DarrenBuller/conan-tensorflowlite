@@ -30,6 +30,8 @@ class TensorFlowLiteConan(ConanFile):
             self.build_requires("bazel_installer/0.25.2")
         if not tools.which("java"):
             self.build_requires("java_installer/8.0.144@bincrafters/stable")
+        if tools.os_info.is_windows and "CONAN_BASH_PATH" not in os.environ:
+            self.build_requires("msys2_installer/latest@bincrafters/stable")
 
     def config_options(self):
         if self.settings.os == 'Windows':
@@ -45,8 +47,10 @@ class TensorFlowLiteConan(ConanFile):
     def build(self):
         with tools.chdir(self._source_subfolder):
             env_build = dict()
+            env_build["MSYS_NO_PATHCONV"] = "1"
             env_build["PYTHON_BIN_PATH"] = sys.executable
             env_build["USE_DEFAULT_PYTHON_LIB_PATH"] = "1"
+            env_build["TF_OVERRIDE_EIGEN_STRONG_INLINE"] ="0"
             env_build["TF_ENABLE_XLA"] = '1'
             env_build["TF_NEED_OPENCL_SYCL"] = '0'
             env_build["TF_NEED_ROCM"] = '0'
@@ -58,14 +62,19 @@ class TensorFlowLiteConan(ConanFile):
             env_build["TF_CONFIGURE_IOS"] = "1" if self.settings.os == "iOS" else "0"
             with tools.environment_append(env_build):
                 self.run(
-                    "python configure.py" if tools.os_info.is_windows else "./configure")
+                    "python configure.py" if tools.os_info.is_windows else "./configure", win_bash=True)
                 self.run("bazel shutdown")
-                self.run("./tensorflow/lite/tools/make/download_dependencies.sh")
+                self.run("./tensorflow/lite/tools/make/download_dependencies.sh", win_bash=True)
                 target = {"Macos": "//tensorflow/lite:libtensorflowlite.dylib",
                           "Linux": "//tensorflow/lite:libtensorflowlite.so",
-                          "Windows": "tensorflow/lite:libtensorflowlite.dll"}.get(str(self.settings.os))
-                self.run("bazel build --cxxopt='-std=c++11' --config=opt --define=no_tensorflow_py_deps=true "
-                         "%s --verbose_failures" % target)
+                          "Windows": "tensorflow/lite:libtensorflowlite.so"}.get(str(self.settings.os))
+                if self.settings.compiler == "Visual Studio":
+                    ## MSVC17 compiler does not offer a specific C++11 mode and defaults to C++14
+                    self.run("bazel build --config=opt --define=no_tensorflow_py_deps=true "
+                         "%s --verbose_failures" % target, win_bash=True)
+                else:
+                    self.run("bazel build --cxxopt='-std=c++11' --config=opt --define=no_tensorflow_py_deps=true "
+                         "%s --verbose_failures" % target, win_bash=True)
               
 
     def packageLibs(self, src):
